@@ -1,0 +1,7 @@
+node_modules
+dist
+.env.local
+.env.local.backup
+.env.test
+*.log
+.DS_Store

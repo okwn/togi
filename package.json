@@ -1,0 +1,35 @@
+{
+  "name": "togi",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "dev:api": "pnpm --filter togi-api dev",
+    "dev:web": "pnpm --filter togi-web dev",
+    "dev:worker": "pnpm --filter togi-worker dev",
+    "dev:infra": "docker compose up -d",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:migrate": "pnpm --filter @togi/db migrate",
+    "db:seed": "pnpm --filter @togi/db seed",
+    "setup:local": "tsx scripts/setup-local.ts",
+    "validate": "tsx scripts/validate-local.ts",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "eslint": "^8.55.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.1.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

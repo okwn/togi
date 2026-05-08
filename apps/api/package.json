@@ -1,0 +1,28 @@
+{
+  "name": "togi-api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^4.25.0",
+    "pino-pretty": "^10.3.0",
+    "@togi/shared": "workspace:*",
+    "@togi/config": "workspace:*",
+    "@togi/telegram-client": "workspace:*",
+    "@togi/db": "workspace:*",
+    "@togi/policy-engine": "workspace:*",
+    "@togi/detection-engine": "workspace:*",
+    "drizzle-orm": "^0.33.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  }
+}
