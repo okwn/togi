@@ -152,3 +152,12 @@ Visual circular progress indicator showing:
 - **Explainable AI** - Moderation reasons are transparent
 - **Security Score** - Quantifiable group health metric
 - **Production Ready** - Docker Compose, monitoring, graceful degradation
+
+### Autonomous Agent (Phase 08)
+
+- **Self-learning security**: Agent observes group patterns, recommends policy adjustments
+- **Event-driven triggers**: Scheduled, raid, spike, or manual analysis
+- **Graduated autonomy**: From observe-only to fully autonomous within policy bounds
+- **Explainable AI**: Every recommendation includes human-readable reasoning
+- **Admin control**: All high-impact actions require explicit approval
+- **Audit trail**: Complete history of agent decisions and outcomes

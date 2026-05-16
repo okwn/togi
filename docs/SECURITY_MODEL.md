@@ -396,3 +396,50 @@ ONGOING:
 - Auto-block only enabled in STRICT/PARANOID modes
 - Groups can opt out of either consuming or contributing
 ```
+
+## Autonomous Agent
+
+### Agent Modes
+
+| Mode | Auto-execute | Recommend | High-impact approval |
+|------|--------------|-----------|---------------------|
+| OBSERVE_ONLY | — | — | Required |
+| RECOMMEND_ONLY | — | All | Required |
+| AUTO_LOW_RISK | Low-risk | Others | Required |
+| AUTO_HIGH_RISK_WITH_POLICY | Policy-allowed | Others | Required |
+
+### High-impact Actions
+
+The following always require explicit admin approval regardless of agent mode:
+- Permanent ban
+- Group lockdown
+- Domain block (global)
+
+### Agent Triggers
+
+- SCHEDULED: Periodic analysis (default: 15 min)
+- RAID: Mass-join detected
+- SPIKE: Violation spike detected
+- ADMIN_REQUEST: `/togi_analyze` command
+- POLICY_REVIEW: Weekly review
+
+### Audit Trail
+
+All agent actions are logged to `agent_runs` table with:
+- Trigger type
+- Observations collected
+- Plan generated
+- Actions taken (executed vs recommended)
+- Reflection results
+- Admin approvals (for high-impact actions)
+
+### Safety Policy
+
+Agent actions are validated against `autonomous_agent_policy`:
+- `enabled`: Agent active for group
+- `mode`: Safety level (OBSERVE_ONLY, RECOMMEND_ONLY, etc.)
+- `allowAutoPolicyTuning`: Auto-adjust policy settings
+- `allowAutoDomainBlocking`: Auto-block domains
+- `allowAutoLockdown`: Auto-enable lockdown
+- `maxActionsPerHour`: Rate limit on auto-actions
+- `requireHumanApprovalForHighImpact`: Always true for ban/lockdown/domain block
