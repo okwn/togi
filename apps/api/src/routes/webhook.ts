@@ -32,6 +32,8 @@ import {
   ErrorCode,
   createError,
 } from '../middleware/security';
+import { rateLimitService } from '../services/rate-limit-service';
+import { idempotencyService, UpdateState } from '../services/idempotency';
 
 export interface WebhookContext {
   bot: TelegramBot;
@@ -51,9 +53,14 @@ export async function registerWebhookRoutes(
   const { bot, actionExecutor, env } = context;
 
   // POST /webhooks/telegram - Main webhook endpoint
-  fastify.post('/webhooks/telegram', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.post('/webhooks/telegram', {
+  config: {
+    bodyLimit: env.WEBHOOK_BODY_MAX_BYTES,
+  }
+}, async (request: FastifyRequest, reply: FastifyReply) => {
     const startTime = Date.now();
     const requestId = request.id;
+    let updateId = '';
 
     try {
       // Verify webhook secret
@@ -75,8 +82,39 @@ export async function registerWebhookRoutes(
         return reply.status(400).send({ error: 'Invalid update' });
       }
 
+      // Update idempotency — prevent duplicate processing
+      const updateId = update.update_id.toString();
+      const existingState = await idempotencyService.checkUpdate(updateId);
+
+      if (existingState === UpdateState.PROCESSED) {
+        request.log.info({ requestId, updateId }, 'Update already processed, returning 200');
+        return reply.status(200).send({ ok: true, duplicate: true });
+      }
+
+      const claimed = await idempotencyService.tryClaimUpdate(updateId);
+      if (!claimed) {
+        // Another process is handling this update
+        return reply.status(200).send({ ok: true });
+      }
+
       // Normalize the update for consistent processing
       const event = normalizeUpdate(update);
+
+      // Webhook per-chat rate limit
+      if (event.chatId) {
+        const chatIdRateKey = `webhook:${event.chatId}`;
+        const rateResult = await rateLimitService.isAllowed(
+          chatIdRateKey,
+          env.RATE_LIMIT_WEBHOOK_WINDOW_MS,
+          env.RATE_LIMIT_WEBHOOK_MAX
+        );
+        if (!rateResult.allowed) {
+          request.log.warn({ requestId, chatId: event.chatId }, 'Chat rate limit exceeded, dropping update');
+          // Still return 200 to avoid Telegram retries
+          await idempotencyService.markFailedRetriable(updateId);
+          return reply.status(200).send({ ok: true, rateLimited: true });
+        }
+      }
 
       // Add text hash if text is present (for safe logging)
       if (event.text && event.textLength) {
@@ -119,10 +157,12 @@ export async function registerWebhookRoutes(
       const processingTime = Date.now() - startTime;
       request.log.info({ requestId, processingTime }, 'Webhook processed');
 
+      await idempotencyService.markProcessed(updateId);
       return reply.status(200).send({ ok: true });
     } catch (error) {
       request.log.error({ requestId, error }, 'Webhook processing failed');
       // Return 200 to prevent Telegram retry storms
+      await idempotencyService.markFailedRetriable(updateId);
       return reply.status(200).send({ ok: false });
     }
   });
