@@ -7,3 +7,4 @@ export * from './mention-spam-detector.js';
 export * from './media-flood-detector.js';
 export * from './raid-detector.js';
 export * from './user-risk-detector.js';
+export * from './threat-intel-detector.js';
