@@ -3,6 +3,8 @@ import { createServer } from './logger';
 import { registerWebhookRoutes } from './routes/webhook';
 import { registerHealthRoutes } from './routes/health';
 import { registerGroupRoutes } from './routes/groups';
+import { registerSecurityHeaders } from './plugins/security-headers';
+import { registerCors } from './plugins/cors-config';
 import { registerAuthRoutes } from '@togi/auth';
 import { TelegramBot, TelegramActionExecutor, createTelegramBot } from '@togi/telegram-client';
 import { getEnv } from '@togi/config';
@@ -19,6 +21,20 @@ async function buildApp(): Promise<FastifyInstance> {
     { host: env.API_HOST, port: env.API_PORT },
     { level: env.LOG_LEVEL }
   );
+  server.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+    try {
+      done(null, JSON.parse(body.toString()));
+    } catch (e) {
+      done(e as Error, undefined);
+    }
+  });
+
+  // Set body size limit
+  (server as any).initialConfig.bodyLimit = env.WEBHOOK_BODY_MAX_BYTES;
+
+  // Register security plugins
+  registerSecurityHeaders(server);
+  registerCors(server);
 
   // Initialize Telegram bot and action executor
   bot = createTelegramBot({
