@@ -401,6 +401,19 @@ describe('TelegramActionExecutor', () => {
       expect(result.ok).toBe(false);
       expect(result.errorMessage).toBe('messageId required');
     });
+
+    it('should return REVIEW for unknown action', async () => {
+      const result = await executor.executeDecision({
+        chatId: 123456,
+        userId: 111,
+        recommendedAction: 'UNKNOWN_ACTION' as any,
+        riskScore: 50,
+        reason: 'test',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.action).toBe('REVIEW');
+    });
   });
 
   describe('action lock release', () => {
