@@ -36,6 +36,7 @@ const EnvSchema = z.object({
 
   // Security
   DEBUG_LOG_RAW_TEXT: z.enum(['true', 'false']).default('false'),
+  ENABLE_DEV_AUTH: z.enum(['true', 'false']).default('false'),
 
   // Development
   DEV_ADMIN_TELEGRAM_ID: z.string().optional(),

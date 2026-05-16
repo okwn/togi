@@ -3,6 +3,7 @@ import { createServer } from './logger';
 import { registerWebhookRoutes } from './routes/webhook';
 import { registerHealthRoutes } from './routes/health';
 import { registerGroupRoutes } from './routes/groups';
+import { registerAuthRoutes } from '@togi/auth';
 import { TelegramBot, TelegramActionExecutor, createTelegramBot } from '@togi/telegram-client';
 import { getEnv } from '@togi/config';
 import { createSecurityEvent, enqueueSecurityEvent } from '@togi/shared';
@@ -30,6 +31,7 @@ async function buildApp(): Promise<FastifyInstance> {
   // Register routes
   await registerHealthRoutes(server);
   await registerGroupRoutes(server);
+  await registerAuthRoutes(server);
   await registerWebhookRoutes(server, { bot, actionExecutor, env });
 
   return server;
@@ -38,20 +40,20 @@ async function buildApp(): Promise<FastifyInstance> {
 async function start() {
   const env = getEnv();
 
-  // Validate required env vars
-  if (env.NODE_ENV === 'production' && !env.TELEGRAM_BOT_TOKEN) {
-    console.error('TELEGRAM_BOT_TOKEN is required in production');
-    process.exit(1);
-  }
-
-  if (env.NODE_ENV === 'production' && !env.TELEGRAM_WEBHOOK_SECRET) {
-    console.error('TELEGRAM_WEBHOOK_SECRET is required in production');
-    process.exit(1);
-  }
-
-  if (env.DEBUG_LOG_RAW_TEXT === 'true' && env.NODE_ENV === 'production') {
-    console.error('DEBUG_LOG_RAW_TEXT=true is not allowed in production');
-    process.exit(1);
+  // Production boot validation — FAIL FAST
+  if (env.NODE_ENV === 'production') {
+    if (process.env.ENABLE_DEV_AUTH === 'true') {
+      throw new Error('FATAL: ENABLE_DEV_AUTH=true is not allowed in production');
+    }
+    if (!env.TELEGRAM_BOT_TOKEN) {
+      throw new Error('FATAL: TELEGRAM_BOT_TOKEN is required');
+    }
+    if (!env.TELEGRAM_WEBHOOK_SECRET) {
+      throw new Error('FATAL: TELEGRAM_WEBHOOK_SECRET is required');
+    }
+    if (!env.JWT_SECRET || env.JWT_SECRET.length < 32) {
+      throw new Error('FATAL: JWT_SECRET must be at least 32 characters');
+    }
   }
 
   const server = await buildApp();
