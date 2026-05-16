@@ -17,7 +17,7 @@ export function createPolicyContext(
     newMemberProtection: {
       enabled: config.newMemberProtection.enabled,
       probationMinutes: config.newMemberProtection.probationMinutes,
-      restrictions: [], // Not present in policy-engine config
+      restrictions: [], // Not present in policy-engine config; defaults to empty
       canInvite: true,  // Not present in policy-engine config
     },
     threatProtection: config.threatProtection,
@@ -26,7 +26,7 @@ export function createPolicyContext(
       enabled: config.raidProtection.enabled,
       joinWindowSeconds: config.raidProtection.windowSeconds,
       maxJoinsPerWindow: config.raidProtection.joinSpikeThreshold,
-      action: '', // Not present in policy-engine config
+      action: 'IGNORE', // Not present in policy-engine config; defaults to IGNORE
       alertAdmins: config.raidProtection.alertAdmins,
       autoProtect: config.raidProtection.autoLockdown,
     },

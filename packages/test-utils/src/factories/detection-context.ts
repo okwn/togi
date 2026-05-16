@@ -4,7 +4,7 @@ export function createDetectionContext(
   overrides: Partial<DetectionContext> = {}
 ): DetectionContext {
   const now = Date.now();
-  return {
+  const context: DetectionContext = {
     chatId: '-1001234567890',
     userId: '123456789',
     username: 'testuser',
@@ -18,4 +18,15 @@ export function createDetectionContext(
     timestamp: now,
     ...overrides,
   };
+
+  // Validate inputs
+  if (typeof context.chatId !== 'string' || context.chatId.length === 0) {
+    throw new Error(`chatId must be a non-empty string, got: ${context.chatId}`);
+  }
+
+  if (typeof context.messageId !== 'number' || context.messageId <= 0) {
+    throw new Error(`messageId must be a positive number, got: ${context.messageId}`);
+  }
+
+  return context;
 }
