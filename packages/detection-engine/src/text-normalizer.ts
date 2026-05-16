@@ -1,6 +1,10 @@
 // Text normalizer for Turkish and English patterns
 // Handles obfuscation, normalization, and text processing
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Turkish-specific character mappings
 const TURKISH_MAP: Record<string, string> = {
   'ı': 'i',
@@ -62,12 +66,12 @@ export function normalizeText(text: string): NormalizedText {
 
   // 3. Convert Turkish characters
   for (const [turkish, ascii] of Object.entries(TURKISH_MAP)) {
-    normalized = normalized.replace(new RegExp(turkish, 'g'), ascii);
+    normalized = normalized.replace(new RegExp(escapeRegex(turkish), 'g'), ascii);
   }
 
   // 4. Convert leetspeak
   for (const [leet, ascii] of Object.entries(LEET_MAP)) {
-    normalized = normalized.replace(new RegExp(leet, 'g'), ascii);
+    normalized = normalized.replace(new RegExp(escapeRegex(leet), 'g'), ascii);
   }
 
   // 5. Lowercase
