@@ -2,11 +2,32 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { verifyInitData } from '../verify-init-data';
 import { createSession, validateSession, revokeSession } from '../session';
 import { requireAuth } from '../middleware/auth';
-import { db, users, groupAdmins, groups } from '@togi/db';
+import { db, redis, users, groupAdmins, groups } from '@togi/db';
 import { eq, and, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { ROLE_PERMISSIONS } from '../rbac';
 import '../types/fastify-plugins';
+
+// Rate limit defaults (must match packages/config/src/index.ts)
+const RATE_LIMIT_PUBLIC_AUTH_WINDOW_MS = parseInt(process.env.RATE_LIMIT_PUBLIC_AUTH_WINDOW_MS || '60000', 10);
+const RATE_LIMIT_PUBLIC_AUTH_MAX = parseInt(process.env.RATE_LIMIT_PUBLIC_AUTH_MAX || '10', 10);
+
+// Simple IP-based rate limiter for auth endpoints
+async function checkIpRateLimit(ip: string, windowMs: number, maxRequests: number): Promise<boolean> {
+  const key = `ratelimit:auth_ip:${Buffer.from(ip).toString('base64').slice(0, 32)}`;
+  const now = Date.now();
+
+  try {
+    await redis.zremrangebyscore(key, 0, now - windowMs);
+    const count = await redis.zcard(key);
+    if (count >= maxRequests) return false;
+    await redis.zadd(key, now, `${now}:${Math.random().toString(36).slice(2)}`);
+    await redis.expire(key, Math.ceil(windowMs / 1000) + 1);
+    return true;
+  } catch {
+    return true; // Fail open
+  }
+}
 
 const telegramCallbackSchema = z.object({
   initData: z.string().min(1),
@@ -22,6 +43,14 @@ export async function registerAuthRoutes(fastify: FastifyInstance) {
 
   // POST /api/auth/telegram/callback
   fastify.post('/auth/telegram/callback', async (request: FastifyRequest, reply: FastifyReply) => {
+    const ip = request.ip;
+    const allowed = await checkIpRateLimit(ip, RATE_LIMIT_PUBLIC_AUTH_WINDOW_MS, RATE_LIMIT_PUBLIC_AUTH_MAX);
+    if (!allowed) {
+      return reply.status(429).send({
+        error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Please try again later.', requestId: request.id }
+      });
+    }
+
     const body = telegramCallbackSchema.safeParse(request.body);
     if (!body.success) {
       return reply.status(400).send({
@@ -29,7 +58,7 @@ export async function registerAuthRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const botToken = env.TELEGRAM_BOT_TOKEN;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
       return reply.status(500).send({
         error: { code: 'INTERNAL_ERROR', message: 'Bot token not configured', requestId: request.id }
@@ -38,6 +67,21 @@ export async function registerAuthRoutes(fastify: FastifyInstance) {
 
     const verified = verifyInitData(body.data.initData, botToken);
     if (!verified) {
+      // Track failed login for abuse detection
+      const ipHash = Buffer.from(request.ip).toString('base64').slice(0, 32);
+      const abuseKey = `abuse:failed_login:${ipHash}`;
+      const now = Date.now();
+      try {
+        const count = await redis.zcard(abuseKey);
+        if (count >= 5) {
+          return reply.status(429).send({
+            error: { code: 'RATE_LIMITED', message: 'Too many failed attempts. Try again later.', requestId: request.id }
+          });
+        }
+        await redis.zadd(abuseKey, now, `${now}`);
+        await redis.expire(abuseKey, 900); // 15 min
+      } catch { /* fail open */ }
+
       return reply.status(401).send({
         error: { code: 'INVALID_HASH', message: 'Invalid Telegram login', requestId: request.id }
       });
