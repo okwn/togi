@@ -23,9 +23,13 @@ Every incoming webhook must be verified:
 ```
 
 ### Replay Protection
+**STATUS: NOT IMPLEMENTED — SECURITY GAP**
+
 - Store last 1000 update IDs in Redis
 - Reject updates with ID <= last processed
 - TTL: 24 hours
+
+**Implementation Required:** Add `webhook:processed-ids` Redis set in `apps/api/src/routes/webhook.ts`
 
 ## Raw Message Minimization
 
@@ -75,16 +79,17 @@ interface AuditEntry {
 
 Redis-based rate limiting prevents abuse:
 
-| Endpoint | Limit | Window |
-|----------|-------|--------|
-| `/webhook/telegram` | 1000 req/s | per second |
-| `/api/*` | 100 req/s | per second |
-| Per user actions | 10/s | per second |
+| Endpoint | Limit | Window | Status |
+|----------|-------|--------|---------|
+| `/webhook/telegram` | 1000 req/s | per second | ✅ Implemented |
+| `/api/*` | 100 req/s | per second | ✅ Implemented |
+| Per IP | NOT IMPLEMENTED | - | ❌ GAP |
+| Per user actions | 10/s | per second | ✅ Implemented |
 
 ## Input Sanitization
 
 All user input is sanitized:
-- SQL queries use parameterized statements
+- SQL queries use parameterized statements (Drizzle ORM)
 - XSS prevention in dashboard
 - Telegram entities parsed, not raw HTML
 
@@ -143,9 +148,9 @@ total = min(botAdminStatus + permissions + protections + lists + audit, 100)
 interface SecurityScore {
   total: number;           // 0-100
   botAdminStatus: number;  // 0-20
-  permissions: number;     // 0-25
+  permissions: number;      // 0-25
   protections: number;     // 0-30
-  lists: number;           // 0-10
+  lists: number;            // 0-10
   audit: number;           // 0-15
   breakdown: {
     hasDeletePermission: boolean;
@@ -167,7 +172,7 @@ interface SecurityScore {
 TOGI supports 5 policy modes with different sensitivity levels:
 
 | Mode | Description | New Member Probation |
-|------|-------------|---------------------|
+|------|-------------|----------------------|
 | RELAXED | Low sensitivity, warn before delete | 2 minutes |
 | BALANCED | Recommended default | 5 minutes |
 | STRICT | High sensitivity | 15 minutes |
@@ -191,12 +196,12 @@ The fast path detection engine provides sub-20ms threat detection without AI or 
 
 ### Performance Targets
 
-| Metric | Target |
-|--------|--------|
-| Risk decision p95 | < 20ms |
-| Redis operations p95 | < 50ms |
-| No AI calls | true |
-| No external reputation calls | true |
+| Metric | Target | Status |
+|--------|--------|--------|
+| Risk decision p95 | < 20ms | **NOT VALIDATED** |
+| Redis operations p95 | < 50ms | **NOT VALIDATED** |
+| No AI calls | true | ✅ |
+| No external reputation calls | true | ✅ |
 
 ### Detection Labels
 
@@ -270,3 +275,94 @@ The async worker handles sensitive operations separately from the fast path:
 - Worker failures do NOT block webhook fast-path
 - API returns 200 immediately, worker processes async
 - Metrics track job failures separately for alerting
+
+---
+
+## Phase 02 Hardening (v0.2.0)
+
+### Rate Limiting Tiers
+Redis-backed sliding-window rate limiting with 7 distinct tiers:
+- **Public auth**: 10 req/min per IP, with abuse tracking (5 failures → 1h block)
+- **Dashboard API**: 100 req/min per session
+- **Policy mutations**: 10 changes/5min per group
+- **Domain rule ops**: 20 ops/min per group
+- **Review queue ops**: 30 ops/min per group
+- **Webhook per-chat**: 30 updates/sec per chat (Telegram hard limit)
+
+### Webhook Replay Protection Architecture
+Update state machine in Redis:
+```
+update_state:{updateId} = RECEIVED → PROCESSING → PROCESSED
+                                    ↘ FAILED_RETRIABLE → (retry)
+                                    ↘ FAILED_FINAL
+```
+- Duplicate (PROCESSED): Return 200 without reprocessing
+- Concurrent (PROCESSING): Return 200, let first processor finish
+- Lock TTL: 30s to prevent thundering herd on retries
+
+### Action Idempotency Locks
+Destructive Telegram actions locked by `action_lock:{chatId}:{messageId}:{actionType}` (5min TTL) to prevent duplicate operations.
+
+### Security Headers
+All responses include:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy` (configurable)
+
+### CORS Allowlist
+- API: No wildcard, explicit allowlist per environment
+- Webhook: No CORS (not needed for Telegram callbacks)
+- Dashboard: Credentialed requests with explicit origin validation
+
+### Degraded Mode Behavior
+When Redis is unavailable:
+- Dashboard mutations: `fail_closed` (blocks writes by default)
+- Webhook processing: `fail_open` (allows minimal processing by default)
+- Configurable via `REDIS_DEGRADED_MODE` env var
+
+---
+
+## Security Audit Findings (2026-05-16)
+
+### CRITICAL
+1. **Production auth not implemented** — Dashboard unusable in production
+2. **Webhook replay protection missing** — SECURITY_MODEL.md specifies but code doesn't implement
+3. **No Dockerfiles** — Cannot containerize for deployment
+
+### HIGH
+4. **Per-IP rate limiting not implemented** — `ipLoggingMiddleware` logs but doesn't block
+5. **RBAC not enforced** — groupAdmins table exists but no middleware verification
+6. **Command target resolution broken** — `/warn @username` can't resolve targets
+
+### MEDIUM
+7. **No CI/CD pipeline** — No automated tests on PR
+8. **BullMQ processors untested** — 5 processors exist but never validated
+9. **Policy not cached** — DB query on every message
+10. **Redis single instance** — SPOF, no Cluster
+
+### LOW
+11. **Rate limit headers missing** — No X-RateLimit-* response headers
+12. **Slow mode incomplete** — Lockdown works, slow mode not implemented
+13. **Homoglyph detection missing** — IDN attacks possible
+14. **No Prometheus on API** — PERFORMANCE_MODEL.md specifies but not implemented
+
+---
+
+## Security Checklist
+
+```
+PRE-RELEASE (v0.2.0):
+[ ] Telegram Login Widget auth implemented
+[ ] Webhook replay protection implemented
+[ ] Per-IP rate limiting enforced
+[ ] RBAC middleware verifying group admin
+[ ] Dockerfiles created for all apps
+[ ] CI/CD pipeline with test automation
+
+ONGOING:
+[ ] Bot token never logged
+[ ] Raw messages never stored
+[ ] Audit logs retained max 90 days
+[ ] Session tokens expire 24h
+[ ] Secrets in .env only, not committed
+```
