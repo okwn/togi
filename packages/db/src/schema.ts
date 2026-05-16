@@ -1,4 +1,8 @@
-import { pgTable, uuid, bigint, varchar, timestamp, jsonb, text, integer, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, bigint, varchar, timestamp, jsonb, text, integer, index, uniqueIndex, pgEnum } from 'drizzle-orm/pg-core';
+
+// Enums
+export const roleEnum = pgEnum('role', ['OWNER', 'SUPERVISOR', 'MODERATOR', 'VIEWER']);
+export const groupStatusEnum = pgEnum('group_status', ['ACTIVE', 'SETUP_PENDING', 'DISABLED']);
 
 // Users table
 export const users = pgTable('users', {
@@ -18,7 +22,7 @@ export const groups = pgTable('groups', {
   telegramChatId: bigint('telegram_chat_id', { mode: 'number' }).unique().notNull(),
   title: varchar('title', { length: 255 }),
   type: varchar('type', { length: 50 }).notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('ACTIVE'),
+  status: groupStatusEnum('status').notNull().default('SETUP_PENDING'),
   botAdminStatus: varchar('bot_admin_status', { length: 30 }).notNull().default('UNKNOWN'),
   ownerTelegramUserId: bigint('owner_telegram_user_id', { mode: 'number' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -30,9 +34,11 @@ export const groupAdmins = pgTable('group_admins', {
   id: uuid('id').primaryKey().defaultRandom(),
   groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
   telegramUserId: bigint('telegram_user_id', { mode: 'number' }).notNull(),
-  role: varchar('role', { length: 20 }).notNull(),
-  permissions: jsonb('permissions').default({}),
+  role: roleEnum('role').notNull().default('VIEWER'),
+  permissions: jsonb('permissions').$type<string[]>().default([]),
+  addedByTelegramUserId: bigint('added_by_telegram_user_id', { mode: 'number' }),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => ({
   groupTelegramUserUnique: uniqueIndex('group_admins_group_telegram_user_unique').on(table.groupId, table.telegramUserId),
@@ -153,6 +159,22 @@ export const reviewQueue = pgTable('review_queue', {
   createdAtIdx: index('idx_review_queue_created_at').on(table.createdAt),
 }));
 
+// Sessions table
+export const sessions = pgTable('sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  telegramUserId: bigint('telegram_user_id', { mode: 'number' }).notNull().references(() => users.id),
+  userAgentHash: varchar('user_agent_hash', { length: 64 }).notNull(),
+  ipHash: varchar('ip_hash', { length: 64 }).notNull(),
+  csrfToken: varchar('csrf_token', { length: 64 }).unique().notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, (table) => ({
+  telegramUserIdIdx: index('idx_sessions_telegram_user_id').on(table.telegramUserId),
+  csrfTokenIdx: index('idx_sessions_csrf_token').on(table.csrfToken),
+  expiresAtIdx: index('idx_sessions_expires_at').on(table.expiresAt),
+}));
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -174,3 +196,6 @@ export type MessageFingerprint = typeof messageFingerprints.$inferSelect;
 export type NewMessageFingerprint = typeof messageFingerprints.$inferInsert;
 export type ReviewQueueItem = typeof reviewQueue.$inferSelect;
 export type NewReviewQueueItem = typeof reviewQueue.$inferInsert;
+export type Role = 'OWNER' | 'SUPERVISOR' | 'MODERATOR' | 'VIEWER';
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
