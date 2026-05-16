@@ -3,7 +3,7 @@
 # Stage 1: Install dependencies
 FROM node:20-alpine AS deps
 
-RUN corepack enable pnpm@8
+RUN corepack enable && corepack prepare pnpm@8 --activate
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ COPY . .
 # Stage 2: Build TypeScript
 FROM node:20-alpine AS builder
 
-RUN corepack enable pnpm@8
+RUN corepack enable && corepack prepare pnpm@8 --activate
 
 WORKDIR /app
 
