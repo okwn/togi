@@ -1,51 +1,80 @@
-// Security Middleware - Rate limiting, auth, and abuse prevention
+// Security Middleware - Rate limiting with enforced blocking, auth, and abuse prevention
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { redis, keys } from '@togi/db';
+import { redis, keys, auditLogs, db } from '@togi/db';
 import { getEnv } from '@togi/config';
+import { rateLimitService } from '../services/rate-limit-service';
+import { eq } from 'drizzle-orm';
 
-export interface RateLimitConfig {
-  windowMs: number;
-  maxRequests: number;
-  keyPrefix: string;
-}
+// IP-based rate limit for public endpoints
+export function ipRateLimitPreHandler(windowMs: number, maxRequests: number) {
+  return async function (request: FastifyRequest, reply: FastifyReply) {
+    // Use X-Forwarded-For if behind proxy, else request.ip
+    const forwarded = request.headers['x-forwarded-for'] as string;
+    const ip = forwarded ? forwarded.split(',')[0]?.trim() : request.ip;
+    const ipHash = Buffer.from(ip).toString('base64').slice(0, 32);
 
-export class RateLimiter {
-  private config: RateLimitConfig;
+    const result = await rateLimitService.isAllowed(`ip:${ipHash}`, windowMs, maxRequests);
 
-  constructor(config: RateLimitConfig) {
-    this.config = config;
-  }
+    reply.header('X-RateLimit-Limit', maxRequests.toString());
+    reply.header('X-RateLimit-Remaining', result.remaining.toString());
+    reply.header('X-RateLimit-Reset', Math.floor(result.resetAt / 1000).toString());
 
-  async isAllowed(identifier: string): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-    const key = `${this.config.keyPrefix}:${identifier}`;
-    const now = Date.now();
-    const windowStart = now - this.config.windowMs;
+    if (!result.allowed) {
+      reply.header('Retry-After', Math.ceil((result.retryAfterMs || 0) / 1000).toString());
 
-    // Remove old entries
-    await redis.zremrangebyscore(key, 0, windowStart);
+      // Log the blocked attempt
+      await logBlockedEvent(request, 'IP_RATE_LIMIT', { ipHash });
 
-    // Count current requests
-    const count = await redis.zcard(key);
-
-    if (count >= this.config.maxRequests) {
-      const oldest = await redis.zrange(key, 0, 0, 'WITHSCORES');
-      const resetAt = oldest.length >= 2 ? parseInt(oldest[1]) + this.config.windowMs : now + this.config.windowMs;
-      return { allowed: false, remaining: 0, resetAt };
+      return reply.status(429).send({
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many requests from your IP. Please try again later.',
+          requestId: request.id,
+        }
+      });
     }
+  };
+}
 
-    // Add new request
-    await redis.zadd(key, now, `${now}_${Math.random().toString(36).slice(2)}`);
-    await redis.expire(key, Math.ceil(this.config.windowMs / 1000));
+// Session-based rate limit for dashboard API
+export function sessionRateLimitPreHandler(windowMs: number, maxRequests: number) {
+  return async function (request: FastifyRequest, reply: FastifyReply) {
+    const sessionId = request.cookies['session_id'] || request.headers['x-session-id'] || 'anonymous';
+    const result = await rateLimitService.isAllowed(`session:${sessionId}`, windowMs, maxRequests);
 
-    return {
-      allowed: true,
-      remaining: this.config.maxRequests - count - 1,
-      resetAt: now + this.config.windowMs,
-    };
+    reply.header('X-RateLimit-Limit', maxRequests.toString());
+    reply.header('X-RateLimit-Remaining', result.remaining.toString());
+    reply.header('X-RateLimit-Reset', Math.floor(result.resetAt / 1000).toString());
+
+    if (!result.allowed) {
+      reply.header('Retry-After', Math.ceil((result.retryAfterMs || 0) / 1000).toString());
+      return reply.status(429).send({
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many requests. Please slow down.',
+          requestId: request.id,
+        }
+      });
+    }
+  };
+}
+
+async function logBlockedEvent(request: FastifyRequest, eventType: string, metadata: Record<string, unknown>) {
+  try {
+    await db.insert(auditLogs).values({
+      groupId: null,
+      actorTelegramUserId: null,
+      action: eventType,
+      targetType: 'RATE_LIMIT',
+      targetId: request.id,
+      metadata: { ...metadata, ip: request.ip, userAgent: request.headers['user-agent'] },
+    });
+  } catch {
+    // Don't fail the request if audit log fails
   }
 }
 
-// Per-group action rate limiter
+// Per-group action rate limiter (keep existing function for Telegram action limiting)
 export async function checkGroupActionRateLimit(
   chatId: number,
   action: string,
@@ -55,19 +84,23 @@ export async function checkGroupActionRateLimit(
   const key = `action_rate:${chatId}:${action}`;
   const now = Date.now();
 
-  await redis.zremrangebyscore(key, 0, now - windowSeconds * 1000);
-  const count = await redis.zcard(key);
+  try {
+    await redis.zremrangebyscore(key, 0, now - windowSeconds * 1000);
+    const count = await redis.zcard(key);
 
-  if (count >= maxActions) {
-    return false; // Rate limited
+    if (count >= maxActions) {
+      return false; // Rate limited
+    }
+
+    await redis.zadd(key, now, `${now}`);
+    await redis.expire(key, windowSeconds);
+    return true;
+  } catch {
+    return true; // Fail open
   }
-
-  await redis.zadd(key, now, `${now}`);
-  await redis.expire(key, windowSeconds);
-  return true;
 }
 
-// Per-user command rate limiter
+// Per-user command rate limiter (keep existing function)
 export async function checkUserCommandRateLimit(
   userId: number,
   command: string,
@@ -77,27 +110,25 @@ export async function checkUserCommandRateLimit(
   const key = `cmd_rate:${userId}:${command}`;
   const now = Date.now();
 
-  await redis.zremrangebyscore(key, 0, now - windowSeconds * 1000);
-  const count = await redis.zcard(key);
+  try {
+    await redis.zremrangebyscore(key, 0, now - windowSeconds * 1000);
+    const count = await redis.zcard(key);
 
-  if (count >= maxCommands) {
-    return false; // Rate limited
+    if (count >= maxCommands) {
+      return false;
+    }
+
+    await redis.zadd(key, now, `${now}`);
+    await redis.expire(key, windowSeconds);
+    return true;
+  } catch {
+    return true;
   }
-
-  await redis.zadd(key, now, `${now}`);
-  await redis.expire(key, windowSeconds);
-  return true;
 }
 
 // Global Telegram API throttle
-const globalApiThrottle = new RateLimiter({
-  windowMs: 1000, // 1 second
-  maxRequests: 25, // Telegram limits 30 msg/sec per chat, be safe with 25
-  keyPrefix: 'global_api',
-});
-
 export async function checkGlobalApiThrottle(): Promise<boolean> {
-  const result = await globalApiThrottle.isAllowed('global');
+  const result = await rateLimitService.isAllowed('global_api:global', 1000, 25);
   return result.allowed;
 }
 
@@ -106,7 +137,7 @@ export function generateRequestId(): string {
   return `togi_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-// IP logging middleware (logs IP but doesn't block by default)
+// IP logging middleware with rate limit tracking
 export function ipLoggingMiddleware(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -115,33 +146,10 @@ export function ipLoggingMiddleware(
   const ip = request.ip;
   const requestId = request.id;
 
-  // Log IP for audit purposes - we log but don't block
   request.log.info({ requestId, ip }, 'Request from IP');
-
-  // Add request ID to response headers for tracing
   reply.header('X-Request-ID', requestId);
 
   done();
-}
-
-// Production auth check
-export async function requireProductionAuth(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
-  const env = getEnv();
-
-  if (env.NODE_ENV !== 'production') {
-    return; // Skip auth in dev
-  }
-
-  // TODO: Implement Telegram Login Widget auth
-  // For now, reject in production
-  return reply.status(401).send({
-    error: 'Unauthorized',
-    code: 'AUTH_NOT_IMPLEMENTED',
-    message: 'Production auth uses Telegram Login Widget (not yet implemented)',
-  });
 }
 
 // Structured error codes
