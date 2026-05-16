@@ -408,6 +408,56 @@ pnpm test
 | [docs/PRIVACY_MODEL.md](docs/PRIVACY_MODEL.md) | Data handling and retention |
 | [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Step-by-step demonstration |
 | [RELEASE_NOTES.md](RELEASE_NOTES.md) | Version history and changelog |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Local and production deployment guide |
+| [docs/CI_CD.md](docs/CI_CD.md) | CI/CD pipeline and workflows |
+| [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) | Pre-release verification checklist |
+
+---
+
+## Docker
+
+### Local Development
+
+```bash
+# Start all services (PostgreSQL, Redis, API, Worker, Web)
+pnpm docker:up
+
+# View logs
+docker compose logs -f
+
+# Stop all services
+docker compose down
+```
+
+### Build Images
+
+```bash
+# Build all services
+pnpm docker:build
+
+# Build specific service
+docker build -f apps/api/Dockerfile --target runner -t togi-api:local .
+docker build -f apps/worker/Dockerfile --target runner -t togi-worker:local .
+docker build -f apps/web/Dockerfile --target runner -t togi-web:local .
+```
+
+### Health Checks
+
+```bash
+# API health
+curl -s http://localhost:4310/health | jq .
+
+# API readiness
+curl -s http://localhost:4310/ready | jq .
+
+# Worker health (metrics port)
+curl -s http://localhost:4390/health | jq .
+
+# Web health
+curl -s http://localhost:4320/health | jq .
+```
+
+For detailed deployment instructions, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 
