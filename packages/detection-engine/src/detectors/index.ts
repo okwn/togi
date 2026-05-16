@@ -6,3 +6,4 @@ export * from './new-member-detector.js';
 export * from './mention-spam-detector.js';
 export * from './media-flood-detector.js';
 export * from './raid-detector.js';
+export * from './user-risk-detector.js';
