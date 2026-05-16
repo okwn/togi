@@ -13,6 +13,8 @@
     "format": "pnpm -r format",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "db:migrate": "pnpm --filter @togi/db migrate",
     "db:seed": "pnpm --filter @togi/db seed",
     "setup:local": "tsx scripts/setup-local.ts",
