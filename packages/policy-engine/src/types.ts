@@ -78,6 +78,15 @@ export interface AdminAlertsConfig {
   minSeverity: ViolationSeverity;
 }
 
+export interface CrossGroupIntelligenceConfig {
+  enabled: boolean;
+  consumeGlobalWatchlist: boolean;
+  contributeAnonymousSignals: boolean;
+  autoBlockHighConfidenceIndicators: boolean;
+  minGroupsForGlobalWatch: number;
+  minRiskForGlobalBlock: number;
+}
+
 export interface PolicyConfig {
   spamProtection: SpamProtectionConfig;
   floodProtection: FloodProtectionConfig;
@@ -87,6 +96,7 @@ export interface PolicyConfig {
   raidProtection: RaidProtectionConfig;
   actionPolicy: ActionPolicyConfig;
   adminAlerts: AdminAlertsConfig;
+  crossGroupIntelligence: CrossGroupIntelligenceConfig;
 }
 
 export interface GroupPolicy {

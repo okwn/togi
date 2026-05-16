@@ -78,6 +78,14 @@ export function getDefaultPolicy(mode: PolicyMode): PolicyConfig {
         alertChannel: null,
         minSeverity: 'CRITICAL',
       },
+      crossGroupIntelligence: {
+        enabled: true,
+        consumeGlobalWatchlist: true,
+        contributeAnonymousSignals: false,
+        autoBlockHighConfidenceIndicators: false,
+        minGroupsForGlobalWatch: 3,
+        minRiskForGlobalBlock: 70,
+      },
     },
     BALANCED: {
       spamProtection: {
@@ -143,6 +151,14 @@ export function getDefaultPolicy(mode: PolicyMode): PolicyConfig {
         alertOnRaid: true,
         alertChannel: null,
         minSeverity: 'MEDIUM',
+      },
+      crossGroupIntelligence: {
+        enabled: true,
+        consumeGlobalWatchlist: true,
+        contributeAnonymousSignals: true,
+        autoBlockHighConfidenceIndicators: false,
+        minGroupsForGlobalWatch: 3,
+        minRiskForGlobalBlock: 70,
       },
     },
     STRICT: {
@@ -210,6 +226,14 @@ export function getDefaultPolicy(mode: PolicyMode): PolicyConfig {
         alertChannel: null,
         minSeverity: 'LOW',
       },
+      crossGroupIntelligence: {
+        enabled: true,
+        consumeGlobalWatchlist: true,
+        contributeAnonymousSignals: true,
+        autoBlockHighConfidenceIndicators: true,
+        minGroupsForGlobalWatch: 3,
+        minRiskForGlobalBlock: 70,
+      },
     },
     PARANOID: {
       spamProtection: {
@@ -276,6 +300,14 @@ export function getDefaultPolicy(mode: PolicyMode): PolicyConfig {
         alertChannel: null,
         minSeverity: 'LOW',
       },
+      crossGroupIntelligence: {
+        enabled: true,
+        consumeGlobalWatchlist: true,
+        contributeAnonymousSignals: true,
+        autoBlockHighConfidenceIndicators: true,
+        minGroupsForGlobalWatch: 3,
+        minRiskForGlobalBlock: 70,
+      },
     },
     CUSTOM: {
       spamProtection: {
@@ -341,6 +373,14 @@ export function getDefaultPolicy(mode: PolicyMode): PolicyConfig {
         alertOnRaid: true,
         alertChannel: null,
         minSeverity: 'MEDIUM',
+      },
+      crossGroupIntelligence: {
+        enabled: true,
+        consumeGlobalWatchlist: true,
+        contributeAnonymousSignals: true,
+        autoBlockHighConfidenceIndicators: false,
+        minGroupsForGlobalWatch: 3,
+        minRiskForGlobalBlock: 70,
       },
     },
   };

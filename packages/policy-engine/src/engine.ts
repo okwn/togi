@@ -3,10 +3,13 @@ import {
   PolicyMode,
   SecurityScore,
   BotPermissions,
+  CrossGroupIntelligenceConfig,
 } from './types.js';
 import { getDefaultPolicy, policyDefaults } from './policy-defaults.js';
 
 export { getDefaultPolicy, policyDefaults };
+
+export type { CrossGroupIntelligenceConfig } from './types.js';
 
 export function validatePolicyConfig(config: unknown): config is PolicyConfig {
   if (!config || typeof config !== 'object') {
@@ -134,6 +137,7 @@ export function mergePolicy(base: PolicyConfig, custom: Partial<PolicyConfig>): 
     raidProtection: { ...base.raidProtection, ...custom.raidProtection },
     actionPolicy: { ...base.actionPolicy, ...custom.actionPolicy },
     adminAlerts: { ...base.adminAlerts, ...custom.adminAlerts },
+    crossGroupIntelligence: { ...base.crossGroupIntelligence, ...custom.crossGroupIntelligence },
   };
 
   return merged;
