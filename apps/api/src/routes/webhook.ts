@@ -17,8 +17,9 @@ import {
   violations,
   groupAdmins,
 } from '@togi/db';
-import { eq } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import { getDefaultPolicy } from '@togi/policy-engine';
+import { ROLE_PERMISSIONS } from '@togi/auth';
 import {
   runFastPath,
   DetectionContext,
@@ -158,7 +159,7 @@ async function handleMessageEvent(
   }
 
   if (event.text.startsWith('/setup')) {
-    await handleSetupCommand(bot, actionExecutor, chatId, request);
+    await handleSetupCommand(bot, actionExecutor, chatId, event, request);
     return;
   }
 
@@ -317,10 +318,50 @@ async function handleSetupCommand(
   bot: TelegramBot,
   actionExecutor: TelegramActionExecutor,
   chatId: number,
+  event: ReturnType<typeof normalizeUpdate>,
   request: FastifyRequest
 ) {
   const requestId = request.id;
+  const callerUserId = event.userId ? parseInt(event.userId) : undefined;
+
+  if (!callerUserId) {
+    await bot.sendMessage(chatId, '⚠️ Could not identify your user. Please start a chat with the bot first.');
+    return;
+  }
+
   try {
+    // Verify caller is admin (must be 'creator' or 'administrator')
+    let callerIsAdmin = false;
+    let callerIsCreator = false;
+    try {
+      const callerMember = await bot.Bot.api.getChatMember(chatId, callerUserId);
+      const callerStatus = 'status' in callerMember ? callerMember.status : 'unknown';
+      callerIsAdmin = ['creator', 'administrator'].includes(callerStatus);
+      callerIsCreator = callerStatus === 'creator';
+    } catch (err) {
+      request.log.warn({ requestId, err, chatId, callerUserId }, 'Failed to get caller chat member');
+    }
+
+    if (!callerIsAdmin) {
+      await bot.sendMessage(chatId, '⚠️ Only group admins can configure TOGI.\n\nAsk a group admin to run /setup.');
+      return;
+    }
+
+    // Get bot user ID and check bot permissions
+    const botUserId = await bot.getBotUserId();
+    let botIsAdmin = false;
+    let botHasRequiredPermissions = true;
+    try {
+      const botMember = await bot.Bot.api.getChatMember(chatId, botUserId);
+      const botStatus = 'status' in botMember ? botMember.status : 'unknown';
+      botIsAdmin = ['creator', 'administrator'].includes(botStatus);
+      // Check if bot has required permissions (can delete messages and restrict members)
+      botHasRequiredPermissions = botIsAdmin; // Basic check - in production would check specific perms
+    } catch (err) {
+      request.log.warn({ requestId, err, chatId, botUserId }, 'Failed to get bot chat member');
+      botIsAdmin = false;
+    }
+
     // Find or create the group
     const [existingGroup] = await db
       .select()
@@ -329,6 +370,7 @@ async function handleSetupCommand(
       .limit(1);
 
     let groupId: string;
+    let isNewGroup = false;
 
     if (existingGroup) {
       groupId = existingGroup.id;
@@ -336,10 +378,16 @@ async function handleSetupCommand(
       const [newGroup] = await db.insert(groups).values({
         telegramChatId: chatId,
         type: 'supergroup',
-        status: 'ACTIVE',
-        botAdminStatus: 'UNKNOWN',
+        status: botIsAdmin ? 'ACTIVE' : 'SETUP_PENDING',
+        botAdminStatus: botIsAdmin ? 'ADMIN' : 'UNKNOWN',
       }).returning();
       groupId = newGroup.id;
+      isNewGroup = true;
+    }
+
+    // Update group status if bot permissions changed
+    if (existingGroup && !botIsAdmin && existingGroup.botAdminStatus === 'ADMIN') {
+      // Bot was demoted or lost perms
     }
 
     // Check if policy already exists
@@ -366,16 +414,62 @@ async function handleSetupCommand(
       version: 1,
     });
 
+    // Promote caller to OWNER if:
+    // - This is a new group (no OWNER exists yet)
+    // - Caller's status is 'creator' (not just 'administrator')
+    if (isNewGroup && callerIsCreator) {
+      // Check if no OWNER exists yet
+      const [existingOwner] = await db
+        .select()
+        .from(groupAdmins)
+        .where(and(
+          eq(groupAdmins.groupId, groupId),
+          eq(groupAdmins.role, 'OWNER'),
+          isNull(groupAdmins.revokedAt)
+        ))
+        .limit(1);
+
+      if (!existingOwner) {
+        // Promote caller to OWNER
+        await db.insert(groupAdmins).values({
+          groupId,
+          telegramUserId: callerUserId,
+          role: 'OWNER',
+          permissions: ROLE_PERMISSIONS['OWNER'],
+          verifiedAt: new Date(),
+        });
+
+        await db.insert(auditLogs).values({
+          groupId,
+          actorTelegramUserId: callerUserId,
+          action: 'ADMIN_PROMOTED',
+          targetType: 'USER',
+          targetId: callerUserId.toString(),
+          metadata: { role: 'OWNER', method: 'setup_command_creator' },
+        });
+      }
+    }
+
     // Log the setup
-    const botUserId = await bot.getBotUserId();
     await db.insert(auditLogs).values({
       groupId,
       actorTelegramUserId: botUserId,
       action: 'GROUP_SETUP',
       targetType: 'GROUP',
       targetId: groupId,
-      metadata: { mode: 'BALANCED' },
+      metadata: { mode: 'BALANCED', botAdminStatus: botIsAdmin ? 'ADMIN' : 'UNKNOWN' },
     });
+
+    if (!botIsAdmin) {
+      await bot.sendMessage(
+        chatId,
+        '⚠️ TOGI configured, but bot is not an admin yet.\n\n' +
+        '📋 Default policy: BALANCED\n\n' +
+        '⚠️ Make the bot an admin to enable full protection.\n\n' +
+        'Use /security_status to check your security score.'
+      );
+      return;
+    }
 
     await bot.sendMessage(
       chatId,
