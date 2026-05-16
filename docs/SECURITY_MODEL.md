@@ -365,4 +365,34 @@ ONGOING:
 [ ] Audit logs retained max 90 days
 [ ] Session tokens expire 24h
 [ ] Secrets in .env only, not committed
+
+---
+
+## Threat Intelligence (Phase 07)
+
+### Architecture
+- User risk profiles aggregated globally, but only non-content data stored
+- Group user profiles isolated per group (never shared)
+- Threat indicators use hashed values, not raw content
+- Cross-group promotion requires multiple independent sources
+
+### Privacy Guarantees
+- NO raw message text ever leaves a group
+- NO user identifiers in threat indicator shares
+- NO group-specific data exposed to other groups
+- All domain/URL/text values are SHA256 hashed before sharing
+
+### Trust Score System
+- New users start at trust score 50
+- Trust increases with positive behavior
+- Trust decreases with violations
+- High trust scores can reduce false positive risk scores by up to 15 points
+- Group admins always have maximum trust
+
+### Cross-Group Threat Sharing
+- Indicators promoted from local to global when:
+  - Same domain/hash seen in 3+ groups
+  - Risk score meets threshold (70 for BLOCK, 40 for WATCH)
+- Auto-block only enabled in STRICT/PARANOID modes
+- Groups can opt out of either consuming or contributing
 ```
