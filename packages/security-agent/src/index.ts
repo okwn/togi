@@ -13,3 +13,7 @@ export * from './safety/audit-logger.js';
 // Planning exports
 export * from './planning/recommendation-engine.js';
 export * from './planning/risk-analyzer.js';
+
+// DB exports
+export * from './db/agent-runs.js';
+export * from './db/recommendations.js';
