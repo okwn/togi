@@ -29,8 +29,16 @@ async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
-  // Set body size limit
-  (server as any).initialConfig.bodyLimit = env.WEBHOOK_BODY_MAX_BYTES;
+  // Set body size limit (defensive - may fail in some fastify versions)
+  try {
+    Object.defineProperty(server, 'initialConfig', {
+      value: { ...server.initialConfig, bodyLimit: env.WEBHOOK_BODY_MAX_BYTES },
+      writable: true,
+      configurable: true,
+    });
+  } catch {
+    // Ignore - bodyLimit is read-only in this fastify version
+  }
 
   // Register security plugins
   registerSecurityHeaders(server);

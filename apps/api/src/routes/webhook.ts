@@ -655,7 +655,7 @@ async function handleBotChatMemberUpdate(
       await db
         .update(groups)
         .set({
-          status: newStatus === 'left' || newStatus === 'kicked' ? 'LEFT' : 'ACTIVE',
+          status: (newStatus === 'left' || newStatus === 'kicked' ? 'DISABLED' : 'ACTIVE') as 'ACTIVE' | 'SETUP_PENDING' | 'DISABLED',
           botAdminStatus,
           updatedAt: new Date(),
         })
