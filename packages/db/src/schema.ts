@@ -175,6 +175,76 @@ export const sessions = pgTable('sessions', {
   expiresAtIdx: index('idx_sessions_expires_at').on(table.expiresAt),
 }));
 
+// User risk profiles (aggregated across groups)
+export const userRiskProfiles = pgTable('user_risk_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  telegramUserId: bigint('telegram_user_id', { mode: 'number' }).unique().notNull(),
+  globalRiskScore: integer('global_risk_score').notNull().default(0),
+  totalViolations: integer('total_violations').notNull().default(0),
+  severeViolations: integer('severe_violations').notNull().default(0),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  lastViolationAt: timestamp('last_violation_at', { withTimezone: true }),
+  labels: jsonb('labels').default([]),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  telegramUserIdIdx: uniqueIndex('user_risk_profiles_telegram_user_id_unique').on(table.telegramUserId),
+}));
+
+// Per-group user behavior (privacy: isolated per group)
+export const groupUserProfiles = pgTable('group_user_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+  telegramUserId: bigint('telegram_user_id', { mode: 'number' }).notNull(),
+  trustScore: integer('trust_score').notNull().default(50),
+  riskScore: integer('risk_score').notNull().default(0),
+  joinedAt: timestamp('joined_at', { withTimezone: true }),
+  firstMessageAt: timestamp('first_message_at', { withTimezone: true }),
+  messageCount: integer('message_count').notNull().default(0),
+  violationCount: integer('violation_count').notNull().default(0),
+  warningCount: integer('warning_count').notNull().default(0),
+  muteCount: integer('mute_count').notNull().default(0),
+  banCount: integer('ban_count').notNull().default(0),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }),
+  probationUntil: timestamp('probation_until', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  groupUserUnique: uniqueIndex('group_user_profiles_group_user_unique').on(table.groupId, table.telegramUserId),
+  groupIdIdx: index('idx_group_user_profiles_group_id').on(table.groupId),
+}));
+
+// Cross-group threat intelligence (anonymized)
+export const threatIndicators = pgTable('threat_indicators', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  type: varchar('type', { length: 30 }).notNull(),
+  valueHash: varchar('value_hash', { length: 64 }).notNull(),
+  normalizedValue: varchar('normalized_value', { length: 255 }),
+  riskScore: integer('risk_score').notNull().default(0),
+  labels: jsonb('labels').default([]),
+  firstSeenGroupId: uuid('first_seen_group_id').references(() => groups.id, { onDelete: 'set null' }),
+  seenCount: integer('seen_count').notNull().default(1),
+  affectedGroupCount: integer('affected_group_count').notNull().default(1),
+  firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  status: varchar('status', { length: 20 }).notNull().default('WATCH'),
+  source: varchar('source', { length: 20 }).notNull().default('AUTO'),
+}, (table) => ({
+  typeIdx: index('idx_threat_indicators_type').on(table.type),
+  statusIdx: index('idx_threat_indicators_status').on(table.status),
+  valueHashIdx: uniqueIndex('idx_threat_indicators_value_hash_unique').on(table.valueHash),
+}));
+
+// Group intelligence opt-out tracking
+export const groupIntelligenceSettings = pgTable('group_intelligence_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }).unique(),
+  consumeGlobalWatchlist: integer('consume_global_watchlist').notNull().default(1),
+  contributeAnonymousSignals: integer('contribute_anonymous_signals').notNull().default(1),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  groupIdIdx: uniqueIndex('group_intelligence_settings_group_id_unique').on(table.groupId),
+}));
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -199,3 +269,11 @@ export type NewReviewQueueItem = typeof reviewQueue.$inferInsert;
 export type Role = 'OWNER' | 'SUPERVISOR' | 'MODERATOR' | 'VIEWER';
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;
+export type UserRiskProfile = typeof userRiskProfiles.$inferSelect;
+export type NewUserRiskProfile = typeof userRiskProfiles.$inferInsert;
+export type GroupUserProfile = typeof groupUserProfiles.$inferSelect;
+export type NewGroupUserProfile = typeof groupUserProfiles.$inferInsert;
+export type ThreatIndicator = typeof threatIndicators.$inferSelect;
+export type NewThreatIndicator = typeof threatIndicators.$inferInsert;
+export type GroupIntelligenceSettings = typeof groupIntelligenceSettings.$inferSelect;
+export type NewGroupIntelligenceSettings = typeof groupIntelligenceSettings.$inferInsert;

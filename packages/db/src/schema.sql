@@ -130,3 +130,67 @@ CREATE INDEX idx_audit_logs_group_id ON audit_logs(group_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
 CREATE INDEX idx_message_fingerprints_group_id ON message_fingerprints(group_id);
 CREATE INDEX idx_message_fingerprints_text_hash ON message_fingerprints(text_hash);
+
+-- User Risk Profiles (Phase 07)
+CREATE TABLE IF NOT EXISTS user_risk_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  telegram_user_id BIGINT NOT NULL UNIQUE,
+  global_risk_score INTEGER NOT NULL DEFAULT 0,
+  total_violations INTEGER NOT NULL DEFAULT 0,
+  severe_violations INTEGER NOT NULL DEFAULT 0,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_violation_at TIMESTAMPTZ,
+  labels JSONB DEFAULT '[]',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS user_risk_profiles_telegram_user_id_unique ON user_risk_profiles(telegram_user_id);
+
+-- Group User Profiles (Phase 07)
+CREATE TABLE IF NOT EXISTS group_user_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  telegram_user_id BIGINT NOT NULL,
+  trust_score INTEGER NOT NULL DEFAULT 50,
+  risk_score INTEGER NOT NULL DEFAULT 0,
+  joined_at TIMESTAMPTZ,
+  first_message_at TIMESTAMPTZ,
+  message_count INTEGER NOT NULL DEFAULT 0,
+  violation_count INTEGER NOT NULL DEFAULT 0,
+  warning_count INTEGER NOT NULL DEFAULT 0,
+  mute_count INTEGER NOT NULL DEFAULT 0,
+  ban_count INTEGER NOT NULL DEFAULT 0,
+  last_activity_at TIMESTAMPTZ,
+  probation_until TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(group_id, telegram_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_group_user_profiles_group_id ON group_user_profiles(group_id);
+
+-- Threat Indicators (Phase 07)
+CREATE TABLE IF NOT EXISTS threat_indicators (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type VARCHAR(30) NOT NULL,
+  value_hash VARCHAR(64) NOT NULL UNIQUE,
+  normalized_value VARCHAR(255),
+  risk_score INTEGER NOT NULL DEFAULT 0,
+  labels JSONB DEFAULT '[]',
+  first_seen_group_id UUID REFERENCES groups(id) ON DELETE SET NULL,
+  seen_count INTEGER NOT NULL DEFAULT 1,
+  affected_group_count INTEGER NOT NULL DEFAULT 1,
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  status VARCHAR(20) NOT NULL DEFAULT 'WATCH',
+  source VARCHAR(20) NOT NULL DEFAULT 'AUTO'
+);
+CREATE INDEX IF NOT EXISTS idx_threat_indicators_type ON threat_indicators(type);
+CREATE INDEX IF NOT EXISTS idx_threat_indicators_status ON threat_indicators(status);
+
+-- Group Intelligence Settings (Phase 07)
+CREATE TABLE IF NOT EXISTS group_intelligence_settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE UNIQUE,
+  consume_global_watchlist INTEGER NOT NULL DEFAULT 1,
+  contribute_anonymous_signals INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
