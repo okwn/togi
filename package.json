@@ -20,7 +20,10 @@
     "setup:local": "tsx scripts/setup-local.ts",
     "validate": "tsx scripts/validate-local.ts",
     "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:build": "bash scripts/docker-build.sh",
+    "docker:push": "bash scripts/docker-push.sh"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
