@@ -2,7 +2,7 @@
 
 ## Version History
 
-### v0.1.0 - Foundation
+### v0.1.0 - Foundation (MVP)
 - [x] Monorepo workspace with pnpm
 - [x] TypeScript base configuration
 - [x] ESLint and Prettier setup
@@ -77,11 +77,42 @@
 - [ ] Release process
 - [ ] Monitoring setup
 
+---
+
+## v0.2.0 — Auth & Security Hardening
+
+**Target:** 4-6 weeks
+
+### Priority 0 (Must Have)
+
+- [ ] Telegram Login Widget integration
+- [ ] JWT session management
+- [ ] Webhook replay protection (update ID deduplication)
+- [ ] Per-IP rate limiting
+- [ ] RBAC enforcement (group admin verification)
+- [ ] Dockerfiles for api/web/worker
+- [ ] CI/CD pipeline (GitHub Actions)
+
+### Priority 1 (Should Have)
+
+- [ ] Command target resolution fix (/warn @username)
+- [ ] Join request screening
+- [ ] Prometheus metrics on API
+- [ ] Load testing validation
+
+### Priority 2 (Nice to Have)
+
+- [ ] Slow mode integration
+- [ ] Redis Cluster
+- [ ] Prometheus on API
+
+---
+
 ## Production Auth (Pending)
 
 ### Telegram Login Widget Integration
 
-For production, authentication will use the Telegram Login Widget:
+For production, authentication uses the Telegram Login Widget:
 
 ```html
 <script async src="https://telegram.org/js/telegram-widget.js?21"
@@ -102,59 +133,83 @@ function onTelegramAuth(user: TelegramUser) {
 }
 ```
 
-**Implementation Plan:**
-1. Create login page with Telegram button
-2. Verify `initData` on backend
-3. Issue JWT for session
-4. Add `verifyInitData` utility using HMAC-SHA256
+**Implementation Status:** NOT STARTED
 
-### Captcha/Verification (Future)
+---
+
+## Captcha/Verification (Future)
 
 Phase 07 implemented basic "I am human" verification button. Future enhancements:
 
-#### Math Captcha
+### Math Captcha
 - Simple arithmetic problems: "What is 3 + 5?"
 - Random number generation
 - 3 attempts before lockout
 
-#### Emoji Captcha
+### Emoji Captcha
 - Display 4-6 emojis
 - Instruction: "Select all 🐱"
 - Multiple correct answers possible
 
-#### Image-Based Captcha
+### Image-Based Captcha
 - Select images containing specific object
 - Use predefined image sets for reliability
 - 9-grid layout
 
-#### Implementation Notes
+### Implementation Notes
 - Captcha verification stored in Redis with 5-minute TTL
 - Failed attempts tracked per user
 - Auto-expire after max attempts
 - Always allow manual admin approval
 
+---
+
 ## Future Considerations
 
-### v1.1.0 - Multi-Language Support
-- [ ] i18n framework
-- [ ] Turkish translations
-- [ ] English as default
-- [ ] Language per group setting
-
-### v1.2.0 - Advanced Features
-- [ ] ML-based spam classification
+### v0.3.0 - Autonomous Agent
+- [ ] LLM integration (Claude API)
+- [ ] Prompt caching
+- [ ] Fallback heuristic classifier
+- [ ] User behavior memory
 - [ ] Cross-group threat intelligence
-- [ ] Advanced analytics dashboard
-- [ ] Custom policy templates
+- [ ] Graduated trust system
 
-### v1.3.0 - Scaling
+### v0.4.0 - Scale & Reliability
 - [ ] Kubernetes deployment
 - [ ] Horizontal pod autoscaling
 - [ ] Redis Cluster
 - [ ] PostgreSQL read replicas
 
-### v1.4.0 - Paid Tier
+### v0.5.0 - Advanced Features
+- [ ] ML-based spam classification
+- [ ] Advanced analytics dashboard
+- [ ] Custom policy templates
+- [ ] Multi-language support (i18n)
+
+### v0.6.0 - Paid Tier
 - [ ] Stripe integration
 - [ ] Usage-based pricing
 - [ ] Premium features
 - [ ] Priority support
+
+---
+
+## Audit (2026-05-16)
+
+### Completed
+- v0.1.0-v0.6.0: Core MVP features implemented
+- v0.8.0: Raid detection implemented
+- v0.9.0: Partial security (signature verification, input sanitization)
+
+### Missing/Incomplete
+- v0.7.0: BullMQ processors not runtime-tested
+- v0.9.0: Per-IP rate limiting, security audit, penetration testing
+- v1.0.0: Integration tests, load testing, monitoring
+
+### v0.2.0 Scope (Auth & Security)
+- Telegram Login Widget
+- Webhook replay protection
+- Per-IP rate limiting
+- RBAC enforcement
+- Dockerfiles
+- CI/CD pipeline

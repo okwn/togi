@@ -1,0 +1,28 @@
+{
+  "name": "@togi/load-test",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "detection": "tsx src/index.ts detection",
+    "webhook": "tsx src/index.ts webhook",
+    "worker": "tsx src/index.ts worker",
+    "redis": "tsx src/index.ts redis",
+    "all": "tsx src/index.ts all",
+    "report": "tsx src/report-template.ts"
+  },
+  "dependencies": {
+    "@togi/config": "workspace:*",
+    "@togi/detection-engine": "workspace:*",
+    "@togi/policy-engine": "workspace:*",
+    "@togi/test-utils": "workspace:*",
+    "fastify": "^4.29.1",
+    "ioredis": "^5.3.0",
+    "ioredis-mock": "^8.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.0"
+  }
+}

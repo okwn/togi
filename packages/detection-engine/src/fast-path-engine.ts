@@ -25,6 +25,7 @@ import { checkNewMember, newMemberToDetection } from './detectors/new-member-det
 import { checkMentionSpam, mentionToDetection } from './detectors/mention-spam-detector.js';
 import { checkMediaFlood, mediaFloodToDetection } from './detectors/media-flood-detector.js';
 import { checkRaidJoin, raidToDetection } from './detectors/raid-detector.js';
+import { calculateUserRiskModifier, type UserRiskContext } from './detectors/user-risk-detector.js';
 
 import { calculateRiskScore, PolicyMode } from './risk-score.js';
 import {
@@ -203,6 +204,25 @@ export async function runFastPath(
   // Merge all detection results
   const mergedDetection = mergeDetectionResults(detectionInputs);
 
+  // Build UserRiskContext from DetectionContext
+  const userRiskContext: UserRiskContext = {
+    telegramUserId: context.userId ? BigInt(context.userId) : BigInt(0),
+    groupId: context.chatId,
+    globalRiskScore: 0, // Not available in fast-path context
+    groupTrustScore: 0, // Not available in fast-path context
+    totalViolations: 0, // Not available in fast-path context
+    severeViolations: 0, // Not available in fast-path context
+    isNewUser: context.isNewUser,
+    hasUsername: context.username !== undefined,
+    firstMessageHasLink: context.isNewUser && context.links.length > 0,
+    isGroupAdmin: false, // Not available in fast-path context
+    isProbation: context.isNewUser && context.userMemberSince !== undefined &&
+      (Date.now() - context.userMemberSince) < policy.newMemberProtection.probationMinutes * 60 * 1000,
+  };
+
+  // Calculate user risk modifier
+  const userRiskResult = calculateUserRiskModifier(userRiskContext);
+
   // Calculate final risk score
   const riskScoreResult = calculateRiskScore(
     {
@@ -218,12 +238,15 @@ export async function runFastPath(
     policy
   );
 
+  // Apply user risk modifier to final score
+  const finalScore = Math.min(100, riskScoreResult.totalScore + userRiskResult.modifier);
+
   // Apply policy mode thresholds to final action
-  const finalAction = determineAction(riskScoreResult.totalScore, policy.mode as PolicyMode);
+  const finalAction = determineAction(finalScore, policy.mode as PolicyMode);
 
   const finalDetection: DetectionResult = {
     ...mergedDetection,
-    riskScore: riskScoreResult.totalScore,
+    riskScore: finalScore,
     severity: riskScoreResult.severity,
     recommendedAction: finalAction,
     fastPath: true,

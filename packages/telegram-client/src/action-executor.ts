@@ -654,10 +654,10 @@ export class TelegramActionExecutor {
         });
 
       default:
+        // Fallback to REVIEW for unknown actions
         return {
-          ok: false,
-          action: recommendedAction,
-          errorMessage: `Unknown action: ${recommendedAction}`,
+          ok: true,
+          action: 'REVIEW',
           retriable: false,
         };
     }
