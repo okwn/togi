@@ -335,6 +335,17 @@ async function takeAction(
   const chatId = parseInt(event.chatId || '0');
   const messageId = event.messageId;
   const userId = event.userId ? parseInt(event.userId) : undefined;
+  const actionType = detection.recommendedAction;
+
+  // Action idempotency — skip if already executed on this message
+  if (messageId) {
+    const locked = await idempotencyService.tryLockAction(chatId, messageId, actionType);
+    if (!locked) {
+      request.log.info({ requestId: request.id, chatId, messageId, actionType },
+        'Action already executed, skipping duplicate');
+      return;
+    }
+  }
 
   const input = {
     chatId,
@@ -347,10 +358,22 @@ async function takeAction(
     recommendedAction: detection.recommendedAction,
   };
 
-  const result = await actionExecutor.executeDecision(input);
+  try {
+    const result = await actionExecutor.executeDecision(input);
 
-  if (!result.ok) {
-    request.log.warn({ requestId: request.id, result }, 'Action execution failed');
+    if (!result.ok) {
+      request.log.warn({ requestId: request.id, result }, 'Action execution failed');
+      // Unlock so it can be retried
+      if (messageId) {
+        await idempotencyService.unlockAction(chatId, messageId, actionType);
+      }
+    }
+    // On success, lock stays until TTL expires (5 min) — prevents rapid duplicate actions
+  } catch (error) {
+    request.log.error({ requestId: request.id, error }, 'Action execution error');
+    if (messageId) {
+      await idempotencyService.unlockAction(chatId, messageId, actionType);
+    }
   }
 }
 
