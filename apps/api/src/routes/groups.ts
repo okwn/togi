@@ -30,6 +30,7 @@ import {
   BotPermissions,
 } from '@togi/policy-engine';
 import { getEnv } from '@togi/config';
+import { requireAuth, requirePermission } from '@togi/auth/middleware';
 
 interface GroupParams {
   id: string;
@@ -40,18 +41,9 @@ interface PolicyParams {
 }
 
 export async function registerGroupRoutes(fastify: FastifyInstance) {
-  const env = getEnv();
-
-  // Dev auth middleware
-  fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-    if (env.NODE_ENV === 'production') {
-      // TODO: Implement Telegram Login Widget auth
-      return reply.status(401).send({ error: 'Production auth uses Telegram Login Widget' });
-    }
-  });
 
   // GET /api/groups - List all groups
-  fastify.get('/groups', async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get('/groups', { preHandler: requireAuth }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const allGroups = await db.select().from(groups).orderBy(desc(groups.createdAt));
       return reply.send({ groups: allGroups });
@@ -64,6 +56,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // GET /api/groups/:id - Get group details
   fastify.get<{ Params: GroupParams }>(
     '/groups/:id',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('policy:read')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -84,6 +77,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // GET /api/groups/:id/policy - Get group policy
   fastify.get<{ Params: GroupParams }>(
     '/groups/:id/policy',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('policy:read')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -131,6 +125,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // PATCH /api/groups/:id/policy - Update group policy
   fastify.patch<{ Params: GroupParams }>(
     '/groups/:id/policy',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('policy:write')(req, reply); } },
     async (
       request: FastifyRequest<{ Params: GroupParams }>,
       reply: FastifyReply
@@ -214,6 +209,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // GET /api/groups/:id/security-score - Get security score
   fastify.get<{ Params: GroupParams }>(
     '/groups/:id/security-score',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('policy:read')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -282,6 +278,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // GET /api/groups/:id/violations - Get group violations
   fastify.get<{ Params: GroupParams }>(
     '/groups/:id/violations',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('logs:read')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -309,6 +306,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // GET /api/groups/:id/audit-logs - Get audit logs
   fastify.get<{ Params: GroupParams }>(
     '/groups/:id/audit-logs',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('logs:read')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -336,6 +334,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // GET /api/groups/:id/review-queue - Get review queue items
   fastify.get<{ Params: GroupParams }>(
     '/groups/:id/review-queue',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('reviewQueue:read')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -367,6 +366,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // POST /api/groups/:id/review-queue/:itemId/approve
   fastify.post<{ Params: GroupParams & { itemId: string } }>(
     '/groups/:id/review-queue/:itemId/approve',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('reviewQueue:approve')(req, reply); } },
     async (
       request: FastifyRequest<{ Params: GroupParams & { itemId: string } }>,
       reply: FastifyReply
@@ -411,6 +411,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // POST /api/groups/:id/review-queue/:itemId/reject
   fastify.post<{ Params: GroupParams & { itemId: string } }>(
     '/groups/:id/review-queue/:itemId/reject',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('reviewQueue:approve')(req, reply); } },
     async (
       request: FastifyRequest<{ Params: GroupParams & { itemId: string } }>,
       reply: FastifyReply
@@ -455,6 +456,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // GET /api/groups/:id/raid-status
   fastify.get<{ Params: GroupParams }>(
     '/groups/:id/raid-status',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('logs:read')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -489,6 +491,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // POST /api/groups/:id/lockdown
   fastify.post<{ Params: GroupParams }>(
     '/groups/:id/lockdown',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('group:settings')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -514,6 +517,7 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // DELETE /api/groups/:id/lockdown
   fastify.delete<{ Params: GroupParams }>(
     '/groups/:id/lockdown',
+    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('group:settings')(req, reply); } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
