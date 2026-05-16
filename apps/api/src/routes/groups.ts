@@ -30,7 +30,8 @@ import {
   BotPermissions,
 } from '@togi/policy-engine';
 import { getEnv } from '@togi/config';
-import { requireAuth, requirePermission } from '@togi/auth/middleware';
+import { requireAuth, requirePermission, requireCsrf } from '@togi/auth/middleware';
+import { sessionRateLimitPreHandler } from '../middleware/security';
 
 interface GroupParams {
   id: string;
@@ -125,7 +126,13 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // PATCH /api/groups/:id/policy - Update group policy
   fastify.patch<{ Params: GroupParams }>(
     '/groups/:id/policy',
-    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('policy:write')(req, reply); } },
+    { preHandler: async (req, reply) => {
+      const env = getEnv();
+      await sessionRateLimitPreHandler(env.RATE_LIMIT_POLICY_WINDOW_MS, env.RATE_LIMIT_POLICY_MAX)(req, reply);
+      if (!reply.sent) await requireAuth(req, reply);
+      if (!reply.sent) await requireCsrf(req, reply);
+      if (!reply.sent) await requirePermission('policy:write')(req, reply);
+    } },
     async (
       request: FastifyRequest<{ Params: GroupParams }>,
       reply: FastifyReply
@@ -366,7 +373,13 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // POST /api/groups/:id/review-queue/:itemId/approve
   fastify.post<{ Params: GroupParams & { itemId: string } }>(
     '/groups/:id/review-queue/:itemId/approve',
-    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('reviewQueue:approve')(req, reply); } },
+    { preHandler: async (req, reply) => {
+      const env = getEnv();
+      await sessionRateLimitPreHandler(env.RATE_LIMIT_REVIEW_QUEUE_WINDOW_MS, env.RATE_LIMIT_REVIEW_QUEUE_MAX)(req, reply);
+      if (!reply.sent) await requireAuth(req, reply);
+      if (!reply.sent) await requireCsrf(req, reply);
+      if (!reply.sent) await requirePermission('reviewQueue:approve')(req, reply);
+    } },
     async (
       request: FastifyRequest<{ Params: GroupParams & { itemId: string } }>,
       reply: FastifyReply
@@ -411,7 +424,13 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // POST /api/groups/:id/review-queue/:itemId/reject
   fastify.post<{ Params: GroupParams & { itemId: string } }>(
     '/groups/:id/review-queue/:itemId/reject',
-    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('reviewQueue:approve')(req, reply); } },
+    { preHandler: async (req, reply) => {
+      const env = getEnv();
+      await sessionRateLimitPreHandler(env.RATE_LIMIT_REVIEW_QUEUE_WINDOW_MS, env.RATE_LIMIT_REVIEW_QUEUE_MAX)(req, reply);
+      if (!reply.sent) await requireAuth(req, reply);
+      if (!reply.sent) await requireCsrf(req, reply);
+      if (!reply.sent) await requirePermission('reviewQueue:approve')(req, reply);
+    } },
     async (
       request: FastifyRequest<{ Params: GroupParams & { itemId: string } }>,
       reply: FastifyReply
@@ -491,7 +510,13 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // POST /api/groups/:id/lockdown
   fastify.post<{ Params: GroupParams }>(
     '/groups/:id/lockdown',
-    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('group:settings')(req, reply); } },
+    { preHandler: async (req, reply) => {
+      const env = getEnv();
+      await sessionRateLimitPreHandler(60000, 5)(req, reply);
+      if (!reply.sent) await requireAuth(req, reply);
+      if (!reply.sent) await requireCsrf(req, reply);
+      if (!reply.sent) await requirePermission('group:settings')(req, reply);
+    } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
@@ -517,7 +542,13 @@ export async function registerGroupRoutes(fastify: FastifyInstance) {
   // DELETE /api/groups/:id/lockdown
   fastify.delete<{ Params: GroupParams }>(
     '/groups/:id/lockdown',
-    { preHandler: async (req, reply) => { await requireAuth(req, reply); if (!reply.sent) await requirePermission('group:settings')(req, reply); } },
+    { preHandler: async (req, reply) => {
+      const env = getEnv();
+      await sessionRateLimitPreHandler(60000, 5)(req, reply);
+      if (!reply.sent) await requireAuth(req, reply);
+      if (!reply.sent) await requireCsrf(req, reply);
+      if (!reply.sent) await requirePermission('group:settings')(req, reply);
+    } },
     async (request: FastifyRequest<{ Params: GroupParams }>, reply: FastifyReply) => {
       try {
         const { id } = request.params;
