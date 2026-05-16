@@ -1,0 +1,65 @@
+# docker-compose.pgbouncer.yml
+# Production example with pgBouncer connection pooling
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.pgbouncer.yml up -d
+#
+# This adds pgBouncer between the application and PostgreSQL.
+# Applications should connect to pgbouncer:5432 instead of postgres:5432.
+
+services:
+  pgbouncer:
+    container_name: togi-pgbouncer
+    image: edoburu/pgbouncer:latest
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-togi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-togi}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN:-500}
+      DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE:-25}
+      MIN_POOL_SIZE: ${PGBOUNCER_MIN_POOL_SIZE:-5}
+      RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE:-10}
+      RESERVE_POOL_TIMEOUT: ${PGBOUNCER_RESERVE_POOL_TIMEOUT:-3}
+      SERVER_IDLE_TIMEOUT: ${PGBOUNCER_SERVER_IDLE_TIMEOUT:-600}
+      LOG_HEALTH_CHECKS: ${PGBOUNCER_LOG_HEALTH_CHECKS:-false}
+    ports:
+      - "${PGBOUNCER_PORT:-5433}:5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pgbouncer -v"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+# Environment variables to add to .env:
+#
+# PostgreSQL connection (for pgbouncer)
+# POSTGRES_USER=togi
+# POSTGRES_PASSWORD=your_secure_password_here
+# POSTGRES_DB=togi
+#
+# pgBouncer settings (optional - defaults shown)
+# PGBOUNCER_PORT=5433
+# PGBOUNCER_MAX_CLIENT_CONN=500
+# PGBOUNCER_DEFAULT_POOL_SIZE=25
+# PGBOUNCER_MIN_POOL_SIZE=5
+# PGBOUNCER_RESERVE_POOL_SIZE=10
+# PGBOUNCER_RESERVE_POOL_TIMEOUT=3
+# PGBOUNCER_SERVER_IDLE_TIMEOUT=600
+#
+# Application should use:
+# POSTGRES_HOST=pgbouncer
+# POSTGRES_PORT=5433
+
+# Pool sizing guidelines:
+#
+# | Users | Max Client Conn | Default Pool | Notes                        |
+# |-------|-----------------|--------------|------------------------------|
+# | <100  | 200             | 15           | Small deployment             |
+# | 100-1K| 500             | 25           | Medium deployment            |
+# | 1K-10K| 1000            | 30           | Large deployment             |
+# | 10K+  | 2000            | 40           | High traffic deployment      |
+#
+# Memory estimation: ~2KB per client connection, ~5KB per server connection

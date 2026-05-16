@@ -13,6 +13,46 @@ export class IdempotencyService {
   private readonly UPDATE_TTL_SECONDS = 86400; // 24h
   private readonly ACTION_LOCK_TTL_SECONDS = 300; // 5min
 
+  // Lua script for atomic claim update
+  // Returns: 1 = claimed, 0 = already processed/failed, -1 = lock held by another
+  private readonly CLAIM_UPDATE_SCRIPT = `
+    local stateKey = KEYS[1]
+    local lockKey = KEYS[2]
+    local ttl = tonumber(ARGV[1])
+    local processedState = ARGV[2]
+    local failedFinalState = ARGV[3]
+    local failedRetriableState = ARGV[4]
+    local processingState = ARGV[5]
+    local pid = ARGV[6]
+
+    local current = redis.call('GET', stateKey)
+
+    if current == processedState then
+      return 0
+    end
+
+    if current == failedFinalState then
+      return 0
+    end
+
+    local lockAcquired = redis.call('SET', lockKey, pid, 'EX', 30, 'NX')
+    if not lockAcquired then
+      return -1
+    end
+
+    if current == failedRetriableState then
+      redis.call('SET', stateKey, processingState, 'EX', ttl)
+      return 1
+    end
+
+    if not current then
+      redis.call('SET', stateKey, processingState, 'EX', ttl)
+      return 1
+    end
+
+    return 0
+  `;
+
   /**
    * Check if an update has already been processed.
    * Returns the state if already seen, null if new.
@@ -29,32 +69,25 @@ export class IdempotencyService {
    * Returns true if we acquired the lock (new or retriable), false if already processed.
    */
   async tryClaimUpdate(updateId: string): Promise<boolean> {
-    const key = `update_state:${updateId}`;
+    const stateKey = `update_state:${updateId}`;
     const lockKey = `update_lock:${updateId}`;
 
-    // Try to set to PROCESSING if not exists or if retriable
-    const current = await redis.get(key);
+    // Use Lua script for atomicity - prevents race condition window
+    const result = await redis.eval(
+      this.CLAIM_UPDATE_SCRIPT,
+      2,
+      stateKey,
+      lockKey,
+      this.UPDATE_TTL_SECONDS,
+      UpdateState.PROCESSED,
+      UpdateState.FAILED_FINAL,
+      UpdateState.FAILED_RETRIABLE,
+      UpdateState.PROCESSING,
+      process.pid.toString()
+    );
 
-    if (current === UpdateState.PROCESSED) return false;
-    if (current === UpdateState.FAILED_FINAL) return false;
-
-    // Try to acquire lock
-    const acquired = await redis.set(lockKey, process.pid.toString(), 'EX', 30, 'NX');
-    if (!acquired) return false; // Another process has the lock
-
-    if (current === UpdateState.FAILED_RETRIABLE) {
-      // Re-process retriable
-      await redis.set(key, UpdateState.PROCESSING, 'EX', this.UPDATE_TTL_SECONDS);
-      return true;
-    }
-
-    if (!current) {
-      // New update — claim it
-      await redis.set(key, UpdateState.PROCESSING, 'EX', this.UPDATE_TTL_SECONDS);
-      return true;
-    }
-
-    return false;
+    // result: 1 = claimed, 0 = already processed/failed, -1 = lock held
+    return result === 1;
   }
 
   /**

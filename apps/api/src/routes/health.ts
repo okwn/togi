@@ -1,4 +1,7 @@
 import { FastifyInstance } from 'fastify';
+import { getPrometheusMetrics } from '../services/metrics';
+import { redis, db } from '@togi/db';
+import { sql } from 'drizzle-orm';
 
 export async function registerHealthRoutes(fastify: FastifyInstance) {
   // GET /health - Basic health check
@@ -18,11 +21,24 @@ export async function registerHealthRoutes(fastify: FastifyInstance) {
       telegram: false,
     };
 
-    // TODO: Add actual dependency checks in Phase 02
-    // For now, just check if we can connect to configured hosts
-    checks.postgres = true; // Placeholder
-    checks.redis = true; // Placeholder
-    checks.telegram = true; // Placeholder
+    // Check Redis connection
+    try {
+      await redis.ping();
+      checks.redis = true;
+    } catch (err) {
+      request.log.error({ err }, 'Redis health check failed');
+    }
+
+    // Check PostgreSQL connection
+    try {
+      await db.execute(sql`SELECT 1`);
+      checks.postgres = true;
+    } catch (err) {
+      request.log.error({ err }, 'Postgres health check failed');
+    }
+
+    // Telegram check would require API call - skip for now
+    checks.telegram = true;
 
     const allReady = Object.values(checks).every(Boolean);
 
@@ -48,5 +64,13 @@ export async function registerHealthRoutes(fastify: FastifyInstance) {
       nodeVersion: process.version,
       environment: process.env.NODE_ENV || 'development',
     });
+  });
+
+  // GET /metrics - Prometheus metrics endpoint
+  fastify.get('/metrics', async (request, reply) => {
+    const metricsOutput = getPrometheusMetrics();
+    return reply
+      .header('Content-Type', 'text/plain; version=0.0.4')
+      .send(metricsOutput);
   });
 }
