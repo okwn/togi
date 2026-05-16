@@ -14,12 +14,23 @@ async function fetchApi<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
+  const csrfToken = typeof window !== 'undefined' ? sessionStorage.getItem('csrfToken') : null;
+  const method = options?.method?.toUpperCase();
+  const isStateChanging = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method || '');
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options?.headers as Record<string, string>),
+  };
+
+  if (isStateChanging && csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    credentials: 'include',
+    headers,
   });
 
   if (!response.ok) {

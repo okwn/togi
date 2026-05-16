@@ -1,7 +1,9 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
+import { useRouter, usePathname } from 'next/navigation';
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const navigation = [
@@ -9,20 +11,54 @@ const navigation = [
   { name: 'Groups', href: '/dashboard/groups' },
 ];
 
-export default function DashboardLayout({
-  children,
-}: {
+interface DashboardLayoutClientProps {
   children: React.ReactNode;
-}) {
+}
+
+function AuthGuard({ children }: DashboardLayoutClientProps) {
+  const router = useRouter();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      if (!res.ok) throw new Error('Not authenticated');
+      return res.json();
+    },
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (!isLoading && error) {
+      router.push('/login');
+    }
+  }, [isLoading, error, router]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-slate-400">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) return null;
+
+  return (
+    <DashboardLayoutUI user={data?.user} groups={data?.groups || []}>
+      {children}
+    </DashboardLayoutUI>
+  );
+}
+
+function DashboardLayoutUI({ user, groups, children }: { user?: any; groups?: any[]; children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* Top Bar */}
       <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="h-full container mx-auto px-4 flex items-center justify-between">
           <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center gap-2">
+            <Link href="/dashboard" className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">T</span>
               </div>
@@ -46,17 +82,21 @@ export default function DashboardLayout({
             </nav>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-sm text-slate-400">
-              <span className="text-green-500">●</span> System Online
-            </div>
+            {user && (
+              <div className="text-sm text-slate-400">
+                <span className="text-green-500">●</span> {user.firstName}
+              </div>
+            )}
           </div>
         </div>
       </header>
-
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         {children}
       </main>
     </div>
   );
+}
+
+export default function DashboardLayout({ children }: DashboardLayoutClientProps) {
+  return <AuthGuard>{children}</AuthGuard>;
 }
