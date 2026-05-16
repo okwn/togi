@@ -245,6 +245,67 @@ export const groupIntelligenceSettings = pgTable('group_intelligence_settings', 
   groupIdIdx: uniqueIndex('group_intelligence_settings_group_id_unique').on(table.groupId),
 }));
 
+// Agent runs table
+export const agentRuns = pgTable('agent_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+  triggerType: varchar('trigger_type', { length: 30 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('RUNNING'),
+  observations: jsonb('observations').default({}),
+  plan: jsonb('plan').default({}),
+  actions: jsonb('actions').default([]),
+  reflection: jsonb('reflection').default({}),
+  safetyLevelUsed: varchar('safety_level_used', { length: 30 }).notNull(),
+  adminApprovals: jsonb('admin_approvals').default([]),
+  startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  errorMessage: text('error_message'),
+}, (table) => ({
+  groupIdIdx: index('idx_agent_runs_group_id').on(table.groupId),
+  statusIdx: index('idx_agent_runs_status').on(table.status),
+  startedAtIdx: index('idx_agent_runs_started_at').on(table.startedAt),
+}));
+
+// Recommendations table
+export const recommendations = pgTable('recommendations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }),
+  agentRunId: uuid('agent_run_id').references(() => agentRuns.id, { onDelete: 'cascade' }),
+  type: varchar('type', { length: 30 }).notNull(),
+  priority: varchar('priority', { length: 20 }).notNull().default('MEDIUM'),
+  status: varchar('status', { length: 20 }).notNull().default('PENDING'),
+  action: jsonb('action').notNull(),
+  reason: text('reason').notNull(),
+  triggeredBy: text('triggered_by').notNull(),
+  adminResponse: jsonb('admin_response'),
+  appliedAt: timestamp('applied_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+}, (table) => ({
+  groupIdIdx: index('idx_recommendations_group_id').on(table.groupId),
+  statusIdx: index('idx_recommendations_status').on(table.status),
+  typeIdx: index('idx_recommendations_type').on(table.type),
+  createdAtIdx: index('idx_recommendations_created_at').on(table.createdAt),
+}));
+
+// Autonomous agent policy table
+export const autonomousAgentPolicies = pgTable('autonomous_agent_policies', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  groupId: uuid('group_id').notNull().references(() => groups.id, { onDelete: 'cascade' }).unique(),
+  enabled: varchar('enabled', { length: 10 }).notNull().default('false'),
+  mode: varchar('mode', { length: 30 }).notNull().default('RECOMMEND_ONLY'),
+  allowAutoPolicyTuning: varchar('allow_auto_policy_tuning', { length: 10 }).notNull().default('false'),
+  allowAutoDomainBlocking: varchar('allow_auto_domain_blocking', { length: 10 }).notNull().default('false'),
+  allowAutoLockdown: varchar('allow_auto_lockdown', { length: 10 }).notNull().default('false'),
+  allowAutoReports: varchar('allow_auto_reports', { length: 10 }).notNull().default('true'),
+  maxActionsPerHour: integer('max_actions_per_hour').notNull().default(20),
+  requireHumanApprovalForHighImpact: varchar('require_human_approval_for_high_impact', { length: 10 }).notNull().default('true'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  groupIdIdx: uniqueIndex('autonomous_agent_policies_group_id_unique').on(table.groupId),
+}));
+
 // Type exports
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -277,3 +338,9 @@ export type ThreatIndicator = typeof threatIndicators.$inferSelect;
 export type NewThreatIndicator = typeof threatIndicators.$inferInsert;
 export type GroupIntelligenceSettings = typeof groupIntelligenceSettings.$inferSelect;
 export type NewGroupIntelligenceSettings = typeof groupIntelligenceSettings.$inferInsert;
+export type AgentRun = typeof agentRuns.$inferSelect;
+export type NewAgentRun = typeof agentRuns.$inferInsert;
+export type Recommendation = typeof recommendations.$inferSelect;
+export type NewRecommendation = typeof recommendations.$inferInsert;
+export type AutonomousAgentPolicy = typeof autonomousAgentPolicies.$inferSelect;
+export type NewAutonomousAgentPolicy = typeof autonomousAgentPolicies.$inferInsert;
