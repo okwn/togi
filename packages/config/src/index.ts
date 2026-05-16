@@ -38,6 +38,33 @@ const EnvSchema = z.object({
   DEBUG_LOG_RAW_TEXT: z.enum(['true', 'false']).default('false'),
   ENABLE_DEV_AUTH: z.enum(['true', 'false']).default('false'),
 
+  // Rate Limiting
+  RATE_LIMIT_PUBLIC_AUTH_WINDOW_MS: z.coerce.number().default(60000),
+  RATE_LIMIT_PUBLIC_AUTH_MAX: z.coerce.number().default(10),
+  RATE_LIMIT_DASHBOARD_WINDOW_MS: z.coerce.number().default(60000),
+  RATE_LIMIT_DASHBOARD_MAX: z.coerce.number().default(100),
+  RATE_LIMIT_POLICY_WINDOW_MS: z.coerce.number().default(300000),
+  RATE_LIMIT_POLICY_MAX: z.coerce.number().default(10),
+  RATE_LIMIT_DOMAIN_RULES_WINDOW_MS: z.coerce.number().default(60000),
+  RATE_LIMIT_DOMAIN_RULES_MAX: z.coerce.number().default(20),
+  RATE_LIMIT_REVIEW_QUEUE_WINDOW_MS: z.coerce.number().default(60000),
+  RATE_LIMIT_REVIEW_QUEUE_MAX: z.coerce.number().default(30),
+  RATE_LIMIT_WEBHOOK_WINDOW_MS: z.coerce.number().default(1000),
+  RATE_LIMIT_WEBHOOK_MAX: z.coerce.number().default(30),
+  RATE_LIMIT_ABUSE_FAILED_LOGIN_WINDOW_MS: z.coerce.number().default(900000),
+  RATE_LIMIT_ABUSE_FAILED_LOGIN_MAX: z.coerce.number().default(5),
+  RATE_LIMIT_ABUSE_BLOCK_DURATION_MS: z.coerce.number().default(3600000),
+
+  // Webhook
+  WEBHOOK_BODY_MAX_BYTES: z.coerce.number().default(65536),
+
+  // CORS
+  CORS_ALLOWED_ORIGINS: z.string().default('http://localhost:4320'),
+
+  // Degraded Mode
+  REDIS_DEGRADED_MODE: z.enum(['fail_closed', 'fail_open']).default('fail_open'),
+  DB_DEGRADED_MODE: z.enum(['fail_closed', 'fail_open']).default('fail_closed'),
+
   // Development
   DEV_ADMIN_TELEGRAM_ID: z.string().optional(),
 });
